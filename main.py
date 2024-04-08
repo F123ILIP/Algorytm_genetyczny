@@ -10,7 +10,10 @@ num_cities = int( input( "How many cities do you want: " ) )
 population_size = 200
 population = int( input( "How large population do you want: " ) )
 area_size = 300
-area_size = int( input( "How large area do you want: " ) )
+crossover_prob = 100
+crossover_prob = int( input( "How large probability to crossover: " ) )
+mutation_prob_percentage = 5
+mutation_prob = int( input( "How large probability of mutation do you want: " ) )
 
 
 def create_plot( num_cities, area_size ):
@@ -110,11 +113,22 @@ def mutate( chromosome ):
     chromosome[ mut2 ] = temp[ mut1 ]
     return chromosome
 
-def succession( population, num_elites ):
-    elites = population.sort_values( by = 'rank' ).iloc[ :num_elites, :-2]
+def succession( population, num_elites, mutation_prob_percentage, crossover_prob ):
+    elites = population.sort_values( by = 'rank' ).iloc[ :num_elites, :-2 ]
     children = elites.copy()
-    for i in range( len( elites ) ):
-        child = pd.Series( order_crossover( elites.iloc[i].tolist(), elites.iloc[i-1].tolist() ) )
+    mutation_prob = mutation_prob_percentage / 100.0
+    for _ in range( len( elites ) ):
+        parent1_idx, parent2_idx = np.random.choice( len( elites ), size = 2, replace = False )
+        parent1 = elites.iloc[ parent1_idx ].tolist()
+        parent2 = elites.iloc[ parent2_idx ].tolist()
+
+        if random.random() < crossover_prob:
+            child = pd.Series( order_crossover( parent1, parent2 ) )
+        else:
+            child = pd.Series( parent1 )
+
+        if random.random() < mutation_prob:
+            child = mutate( child )
         children = pd.concat( [ children, child.to_frame().T ], ignore_index = True )
 
     return children
@@ -136,7 +150,7 @@ print( 'qfmin', qfmin )
 plot_best_route( cit, qf )
 
 print( cut_bad( qfmin ) )
-next_generation = succession( qfmin, num_cities )
+next_generation = succession( qfmin, num_cities, mutation_prob_percentage, crossover_prob )
 qf2 = quality_function( next_generation, di )
 qf2min = qf_min( qf2 )
 print( cut_bad( qf2 ) )
@@ -146,12 +160,26 @@ tolerance = 0.1
 tol = num_cities
 condition = abs(qf2.loc[qf2['rank'] == 0, 'total'].values[0] - qf2.loc[qf2['rank'] == tol, 'total'].values[0]) < tolerance
 
-while( qf2.loc[qf2['rank'] == 0, 'total'].values[0] > 0.6 * qf.loc[qf['rank'] == 0, 'total'].values[0] and
+quality_values = []
+
+while( qf2.loc[qf2['rank'] == 0, 'total'].values[0] > 0.4 * qf.loc[qf['rank'] == 0, 'total'].values[0] and
        qf2.loc[qf2['rank'] == 0, 'total'].values[0] != qf2.loc[qf2['rank'] == tol, 'total'].values[0] ):
 
-    next_generation = succession( qf2min, num_cities )
+    next_generation = succession( qf2min, num_cities, mutation_prob_percentage, crossover_prob )
     qf2 = quality_function( next_generation, di )
     qf2min = qf_min( qf2 )
     print( cut_bad( qf2 ) )
     time.sleep( 0.3 )
+
+    best_quality = qf2.loc[ qf2[ 'rank' ] == 0, 'total' ].values[0]
+    quality_values.append( best_quality )
+
+plt.figure( figsize = ( 10, 6 ) )
+plt.plot( range( len( quality_values ) ), quality_values, marker = 'o', linestyle='-' )
+plt.title( 'Malejąca funkcja jakości dla najlepszego osobnika w kolejnych iteracjach' )
+plt.xlabel( 'Numer iteracji' )
+plt.ylabel( 'Wartość funkcji jakości' )
+plt.grid( True )
+plt.show()
+
 plot_best_route( cit, qf2 )
